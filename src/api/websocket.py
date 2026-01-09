@@ -5,7 +5,7 @@ import websockets
 from typing import Optional, Dict, Callable, Any, Set
 from datetime import datetime
 from loguru import logger
-import orjson
+import json
 
 from src.api.auth import KalshiAuth
 from src.models.config import WebSocketConfig
@@ -74,9 +74,9 @@ class WebSocketManager:
             logger.info(f"Connecting to WebSocket: {self.ws_url}")
             self.websocket = await websockets.connect(
                 self.ws_url,
-                extra_headers=headers,
-                ping_interval=None,  # We'll handle heartbeats manually
-                ping_timeout=None,
+                additional_headers=headers,  # Changed from extra_headers for websockets 12+
+                ping_interval=30,
+                ping_timeout=10,
                 close_timeout=10
             )
 
@@ -86,8 +86,8 @@ class WebSocketManager:
 
             # Start background tasks
             self._receive_task = asyncio.create_task(self._receive_loop())
-            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-
+            # Heartbeat handled by websockets library
+            
             return True
 
         except Exception as e:
@@ -103,8 +103,6 @@ class WebSocketManager:
         # Cancel background tasks
         if self._receive_task:
             self._receive_task.cancel()
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
 
         # Close connection
         if self.websocket:
@@ -114,12 +112,13 @@ class WebSocketManager:
         self.connected = False
         logger.info("WebSocket disconnected")
 
-    async def subscribe(self, channel: str, handler: Optional[Callable] = None) -> bool:
+    async def subscribe(self, channel: str, handler: Optional[Callable] = None, market_tickers: Optional[list[str]] = None) -> bool:
         """Subscribe to WebSocket channel
 
         Args:
-            channel: Channel name (e.g., "orderbook_delta:KXHARRIS24")
+            channel: Channel name (e.g., "orderbook_delta")
             handler: Optional message handler callback
+            market_tickers: Optional list of market tickers to filter by
 
         Returns:
             True if subscription successful
@@ -131,22 +130,31 @@ class WebSocketManager:
         try:
             # Send subscription message
             self._message_id += 1
+            params = {"channels": [channel]}
+            if market_tickers:
+                params["market_tickers"] = market_tickers
+
             subscribe_msg = {
                 "id": self._message_id,
                 "cmd": "subscribe",
-                "params": {
-                    "channels": [channel]
-                }
+                "params": params
             }
 
-            await self.websocket.send(orjson.dumps(subscribe_msg))
-            self._subscriptions.add(channel)
+            await self.websocket.send(json.dumps(subscribe_msg))
 
-            # Register handler
-            if handler:
-                self._message_handlers[channel] = handler
+            # Store subscription key
+            # For single-ticker subscriptions, we key by channel:ticker to route messages correctly
+            if market_tickers and len(market_tickers) == 1:
+                sub_key = f"{channel}:{market_tickers[0]}"
+                self._subscriptions.add(sub_key)
+                if handler:
+                    self._message_handlers[sub_key] = handler
+            else:
+                self._subscriptions.add(channel)
+                if handler:
+                    self._message_handlers[channel] = handler
 
-            logger.info(f"Subscribed to channel: {channel}")
+            logger.info(f"Subscribed to channel: {channel} (tickers={market_tickers})")
             return True
 
         except Exception as e:
@@ -175,7 +183,7 @@ class WebSocketManager:
                 }
             }
 
-            await self.websocket.send(orjson.dumps(unsubscribe_msg))
+            await self.websocket.send(json.dumps(unsubscribe_msg))
             self._subscriptions.discard(channel)
             self._message_handlers.pop(channel, None)
 
@@ -193,32 +201,21 @@ class WebSocketManager:
         try:
             while not self._should_stop and self.connected:
                 try:
-                    # Receive message with timeout
-                    message = await asyncio.wait_for(
-                        self.websocket.recv(),
-                        timeout=self.config.heartbeat_interval + 10
-                    )
+                    # Receive message
+                    # We rely on websockets library ping_timeout to detect dead connections
+                    message = await self.websocket.recv()
 
                     # Parse JSON
-                    data = orjson.loads(message)
+                    data = json.loads(message)
 
                     # Handle message
                     await self._handle_message(data)
-
-                except asyncio.TimeoutError:
-                    logger.warning("WebSocket receive timeout")
-                    # Check if connection is stale
-                    time_since_heartbeat = (datetime.utcnow() - self._last_heartbeat).total_seconds()
-                    if time_since_heartbeat > 60:
-                        logger.error("Connection stale, triggering reconnect")
-                        await self._reconnect()
-                        break
 
                 except websockets.exceptions.ConnectionClosed:
                     logger.warning("WebSocket connection closed")
                     await self._reconnect()
                     break
-
+        
         except asyncio.CancelledError:
             logger.info("WebSocket receive loop cancelled")
         except Exception as e:
@@ -277,34 +274,6 @@ class WebSocketManager:
                 logger.error(f"Handler error for {channel}: {e}")
         else:
             logger.debug(f"No handler registered for {channel}")
-
-    async def _heartbeat_loop(self) -> None:
-        """Background task: send periodic heartbeat pings"""
-        logger.info(f"WebSocket heartbeat loop started (interval={self.config.heartbeat_interval}s)")
-
-        try:
-            while not self._should_stop and self.connected:
-                await asyncio.sleep(self.config.heartbeat_interval)
-
-                if self.connected and self.websocket:
-                    try:
-                        # Send ping
-                        ping_msg = {
-                            "type": "ping",
-                            "timestamp": int(datetime.utcnow().timestamp() * 1000)
-                        }
-                        await self.websocket.send(orjson.dumps(ping_msg))
-                        logger.debug("Sent ping")
-
-                    except Exception as e:
-                        logger.error(f"Heartbeat ping failed: {e}")
-                        await self._reconnect()
-                        break
-
-        except asyncio.CancelledError:
-            logger.info("WebSocket heartbeat loop cancelled")
-        except Exception as e:
-            logger.error(f"WebSocket heartbeat loop error: {e}")
 
     async def _reconnect(self) -> None:
         """Attempt to reconnect with exponential backoff"""

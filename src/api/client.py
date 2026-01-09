@@ -85,14 +85,20 @@ class KalshiClient:
         # Prepare request body
         body_str = ""
         if body:
-            import orjson
-            body_str = orjson.dumps(body).decode('utf-8')
-
-        # Get authentication headers
-        headers = self.auth.sign_request(method, path, body_str)
+            import json
+            body_str = json.dumps(body)
 
         # Build full URL
         url = f"{self.base_url}{path}"
+
+        # Extract the path portion for signing (everything after domain)
+        # e.g., https://api.elections.kalshi.com/trade-api/v2/portfolio/balance -> /trade-api/v2/portfolio/balance
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        full_path = parsed.path
+
+        # Get authentication headers (sign the full path including /trade-api/v2/)
+        headers = self.auth.sign_request(method, full_path, body_str)
 
         # Execute request
         async with self.session.request(

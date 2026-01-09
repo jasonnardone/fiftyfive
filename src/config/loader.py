@@ -16,7 +16,7 @@ class ConfigLoader:
     def __init__(self):
         """Initialize config loader"""
         # Load environment variables from .env file
-        load_dotenv()
+        load_dotenv(override=True)
 
     def load(self, config_path: str) -> Config:
         """Load configuration from YAML file

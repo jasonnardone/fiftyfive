@@ -67,15 +67,22 @@ class OrderBookManager:
         """
         # Initialize order book
         if ticker not in self._orderbooks:
-            self._orderbooks[ticker] = OrderBook(market_ticker=ticker)
+            self._orderbooks[ticker] = OrderBook(
+                market_ticker=ticker,
+                yes_bids=[],
+                no_bids=[],
+                yes_asks=[],
+                no_asks=[]
+            )
 
         # Fetch initial snapshot
         await self._fetch_snapshot(ticker)
 
         # Subscribe to WebSocket deltas
-        channel = f"orderbook_delta:{ticker}"
+        channel = "orderbook_delta"
         success = await self.ws_manager.subscribe(
             channel,
+            market_tickers=[ticker],
             handler=lambda msg: self._handle_delta(ticker, msg)
         )
 
@@ -135,31 +142,36 @@ class OrderBookManager:
         Returns:
             OrderBook object
         """
-        orderbook = OrderBook(market_ticker=ticker)
-
         # Parse YES side
         yes_data = snapshot.get('yes', {})
-        orderbook.yes_bids = [
+        yes_bids = [
             PriceLevel(price=level[0], quantity=level[1])
             for level in yes_data.get('bids', [])
         ]
-        orderbook.yes_asks = [
+        yes_asks = [
             PriceLevel(price=level[0], quantity=level[1])
             for level in yes_data.get('asks', [])
         ]
 
         # Parse NO side
         no_data = snapshot.get('no', {})
-        orderbook.no_bids = [
+        no_bids = [
             PriceLevel(price=level[0], quantity=level[1])
             for level in no_data.get('bids', [])
         ]
-        orderbook.no_asks = [
+        no_asks = [
             PriceLevel(price=level[0], quantity=level[1])
             for level in no_data.get('asks', [])
         ]
 
-        orderbook.last_updated = datetime.utcnow()
+        orderbook = OrderBook(
+            market_ticker=ticker,
+            yes_bids=yes_bids,
+            yes_asks=yes_asks,
+            no_bids=no_bids,
+            no_asks=no_asks,
+            last_updated=datetime.utcnow()
+        )
 
         return orderbook
 

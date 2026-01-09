@@ -4,7 +4,7 @@ import base64
 import hashlib
 from pathlib import Path
 from typing import Dict
-from datetime import datetime, timezone
+from datetime import datetime
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -58,11 +58,13 @@ class KalshiAuth:
         Raises:
             ValueError: If signing fails
         """
-        # Get current timestamp in milliseconds
-        timestamp = str(int(datetime.now(timezone.utc).timestamp() * 1000))
+        # Get current timestamp in milliseconds (use local time, not UTC)
+        timestamp = str(int(datetime.now().timestamp() * 1000))
 
-        # Construct message to sign: timestamp + method + path + body
-        message = timestamp + method.upper() + path + body
+        # Construct message to sign: timestamp + method + path (NO BODY per Kalshi docs)
+        # Strip query parameters if present
+        path_without_query = path.split('?')[0]
+        message = timestamp + method.upper() + path_without_query
 
         # Create signature using RSA-PSS with SHA256
         try:
