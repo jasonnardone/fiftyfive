@@ -17,10 +17,12 @@ from src.models.config import Config
 from src.models.order import OrderSide
 from src.utils.logger import setup_logger
 from src.utils.rate_limiter import RateLimiter
+from src.utils.alerts import AlertDispatcher
 from src.api.auth import KalshiAuth
 from src.api.client import KalshiClient
 from src.api.websocket import WebSocketManager
 from src.data.orderbook_manager import OrderBookManager
+from src.data.market_discovery import MarketDiscovery
 from src.execution.stp_engine import STPEngine
 from src.execution.order_manager import OrderManager
 from src.risk.position_tracker import PositionTracker
@@ -48,6 +50,8 @@ class FiftyFiveBot:
         self.api_client: Optional[KalshiClient] = None
         self.ws_manager: Optional[WebSocketManager] = None
         self.orderbook_manager: Optional[OrderBookManager] = None
+        self.market_discovery: Optional[MarketDiscovery] = None
+        self.alert_dispatcher: Optional[AlertDispatcher] = None
         self.stp_engine: Optional[STPEngine] = None
         self.position_tracker: Optional[PositionTracker] = None
         self.risk_monitor: Optional[RiskMonitor] = None
@@ -122,6 +126,16 @@ class FiftyFiveBot:
             staleness_threshold=self.config.data.orderbook.staleness_threshold
         )
 
+        # Initialize Market Discovery
+        self.market_discovery = MarketDiscovery(
+            api_client=self.api_client,
+            config=self.config.strategy.market_filters
+        )
+
+        # Initialize Alert Dispatcher
+        self.alert_dispatcher = AlertDispatcher(config=self.config.monitoring.alerts)
+        await self.alert_dispatcher.start()
+
         # Initialize STP engine
         self.stp_engine = STPEngine(
             cancel_delay=self.config.execution.stp_cancel_delay
@@ -134,7 +148,8 @@ class FiftyFiveBot:
         self.risk_monitor = RiskMonitor(
             config=self.config.risk,
             position_tracker=self.position_tracker,
-            kill_switch_callback=self._kill_switch_triggered
+            kill_switch_callback=self._kill_switch_triggered,
+            alert_dispatcher=self.alert_dispatcher
         )
 
         # Initialize order manager
@@ -163,37 +178,11 @@ class FiftyFiveBot:
         Returns:
             List of market tickers
         """
-        logger.info("Discovering markets...")
-
-        try:
-            # Fetch markets
-            response = await self.api_client.get_markets(status='open', limit=100)
-            markets = response.get('markets', [])
-
-            # Apply filters
-            filters = self.config.strategy.market_filters
-            filtered_markets = []
-
-            for market in markets:
-                # Category filter
-                if filters.categories:
-                    if market.get('category') not in filters.categories:
-                        continue
-
-                # Volume filter
-                if market.get('volume', 0) < filters.min_daily_volume:
-                    continue
-
-                # TODO: Add spread filter
-
-                filtered_markets.append(market['ticker'])
-
-            logger.info(f"Found {len(filtered_markets)} markets matching filters")
-            return filtered_markets[:10]  # Limit to 10 markets for demo
-
-        except Exception as e:
-            logger.error(f"Market discovery failed: {e}")
+        if not self.market_discovery:
+            logger.error("Market discovery not initialized")
             return []
+
+        return await self.market_discovery.get_target_markets(limit=10)
 
     async def subscribe_markets(self, tickers: List[str]) -> None:
         """Subscribe to market order books
@@ -394,6 +383,10 @@ class FiftyFiveBot:
         # Close HTTP session
         if self.session:
             await self.session.close()
+
+        # Stop alert dispatcher
+        if self.alert_dispatcher:
+            await self.alert_dispatcher.stop()
 
         logger.info("Shutdown complete")
 

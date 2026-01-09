@@ -1,0 +1,18 @@
+# Ignore dependency locks (huge token wasters)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+poetry.lock
+
+# Ignore git internals
+.git/
+
+# Ignore large build/dist folders
+dist/
+build/
+__pycache__/
+venv/
+node_modules/
+
+# Ignore your private keys folder
+.keys/

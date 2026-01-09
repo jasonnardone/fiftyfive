@@ -7,7 +7,9 @@ Maintains accurate order book state by:
 """
 
 import asyncio
-from typing import Dict, Optional
+import math
+from typing import Dict, Optional, Deque
+from collections import deque
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -45,6 +47,9 @@ class OrderBookManager:
 
         # Sequence tracking for gap detection
         self._expected_seq: Dict[str, int] = {}
+
+        # Price history for volatility calc (ticker -> side -> deque)
+        self._price_history: Dict[str, Dict[OrderSide, Deque[float]]] = {}
 
         # Snapshot sync task
         self._snapshot_task: Optional[asyncio.Task] = None
@@ -127,6 +132,7 @@ class OrderBookManager:
 
             # Update
             self._orderbooks[ticker] = orderbook
+            self._update_price_history(ticker)
             logger.info(f"Order book snapshot updated: {ticker}")
 
         except Exception as e:
@@ -218,11 +224,27 @@ class OrderBookManager:
             # Update sequence
             orderbook.sequence = seq
             orderbook.last_updated = datetime.utcnow()
+            
+            # Update price history
+            self._update_price_history(ticker)
 
             logger.debug(f"Applied delta to {ticker} (seq={seq})")
 
         except Exception as e:
             logger.error(f"Error handling delta for {ticker}: {e}")
+
+    def _update_price_history(self, ticker: str) -> None:
+        """Update price history for volatility calculation"""
+        if ticker not in self._price_history:
+            self._price_history[ticker] = {
+                OrderSide.YES: deque(maxlen=100),
+                OrderSide.NO: deque(maxlen=100)
+            }
+            
+        for side in [OrderSide.YES, OrderSide.NO]:
+            mid = self.get_mid_price(ticker, side)
+            if mid is not None:
+                self._price_history[ticker][side].append(mid)
 
     def _validate_sequence(self, ticker: str, seq: int) -> bool:
         """Validate sequence number for gap detection
@@ -388,10 +410,7 @@ class OrderBookManager:
             logger.error(f"Snapshot sync loop error: {e}")
 
     def get_volatility(self, ticker: str, side: OrderSide, window: int = 10) -> Optional[float]:
-        """Calculate price volatility (for dynamic spread adjustment)
-
-        Note: This is a placeholder. Real implementation would track
-        price history and calculate standard deviation.
+        """Calculate price volatility (standard deviation of recent mid prices)
 
         Args:
             ticker: Market ticker
@@ -399,9 +418,21 @@ class OrderBookManager:
             window: Number of price samples
 
         Returns:
-            Volatility metric or None
+            Standard deviation or None if insufficient data
         """
-        # TODO: Implement proper volatility tracking with price history
-        # For now, use spread as proxy for volatility
-        spread = self.get_spread(ticker, side)
-        return spread if spread else 0.0
+        if ticker not in self._price_history:
+            return None
+            
+        history = self._price_history[ticker][side]
+        if len(history) < 2:
+            return None
+            
+        # Use last N samples
+        samples = list(history)[-window:]
+        if len(samples) < 2:
+            return None
+            
+        # Calculate standard deviation
+        mean = sum(samples) / len(samples)
+        variance = sum((x - mean) ** 2 for x in samples) / (len(samples) - 1)
+        return math.sqrt(variance)

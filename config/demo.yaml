@@ -39,6 +39,8 @@ strategy:
     max_spread: 0.15
     inventory_adjustment: true
     inventory_multiplier: 1.5
+    volatility_adjustment: true
+    volatility_multiplier: 2.0
 
   order_sizing:
     method: fixed

@@ -45,6 +45,8 @@ class PureMarketMakingStrategy(Strategy):
         self.max_spread = config.pricing.max_spread or self.base_spread * 3
         self.inventory_adjustment = config.pricing.inventory_adjustment
         self.inventory_multiplier = config.pricing.inventory_multiplier
+        self.volatility_adjustment = config.pricing.volatility_adjustment
+        self.volatility_multiplier = config.pricing.volatility_multiplier
 
         self.base_size = config.order_sizing.base_size
         self.max_size = config.order_sizing.max_size
@@ -167,6 +169,19 @@ class PureMarketMakingStrategy(Strategy):
                 logger.debug(
                     f"Inventory adjustment: {market_ticker} {side.value} "
                     f"inventory={inventory}, factor={inventory_factor:.2f}"
+                )
+
+        # Apply volatility adjustment
+        if self.volatility_adjustment:
+            volatility = self.orderbook_manager.get_volatility(market_ticker, side)
+            if volatility is not None and volatility > 0:
+                # Add volatility premium (std dev * multiplier)
+                vol_premium = volatility * self.volatility_multiplier
+                spread += vol_premium
+                
+                logger.debug(
+                    f"Volatility adjustment: {market_ticker} {side.value} "
+                    f"vol={volatility:.4f}, premium={vol_premium:.4f}"
                 )
 
         # Clamp spread to min/max

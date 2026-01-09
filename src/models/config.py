@@ -50,6 +50,8 @@ class PricingConfig(BaseModel):
     max_spread: Optional[float] = Field(default=None, ge=0.01, le=1.0)
     inventory_adjustment: bool = Field(default=True)
     inventory_multiplier: float = Field(default=1.5, ge=1.0)
+    volatility_adjustment: bool = Field(default=True)
+    volatility_multiplier: float = Field(default=2.0, ge=1.0)
 
     @field_validator('max_spread')
     def validate_max_spread(cls, v, info):

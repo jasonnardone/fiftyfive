@@ -13,6 +13,7 @@ from loguru import logger
 from src.models.config import RiskConfig
 from src.models.order import Order
 from src.risk.position_tracker import PositionTracker
+from src.utils.alerts import AlertDispatcher
 
 
 @dataclass
@@ -35,7 +36,8 @@ class RiskMonitor:
         self,
         config: RiskConfig,
         position_tracker: PositionTracker,
-        kill_switch_callback: Optional[Callable] = None
+        kill_switch_callback: Optional[Callable] = None,
+        alert_dispatcher: Optional[AlertDispatcher] = None
     ):
         """Initialize risk monitor
 
@@ -43,10 +45,12 @@ class RiskMonitor:
             config: Risk configuration
             position_tracker: Position tracker instance
             kill_switch_callback: Async callback to trigger kill switch
+            alert_dispatcher: Alert dispatcher instance
         """
         self.config = config
         self.position_tracker = position_tracker
         self.kill_switch_callback = kill_switch_callback
+        self.alert_dispatcher = alert_dispatcher
 
         # Daily tracking
         self._daily_start_pnl = 0.0
@@ -246,6 +250,14 @@ class RiskMonitor:
 
             logger.critical(f"🚨 KILL SWITCH ACTIVATED: {reason}")
             self.kill_switch_active = True
+
+            # Send alert
+            if self.alert_dispatcher:
+                await self.alert_dispatcher.send_alert(
+                    title="KILL SWITCH ACTIVATED",
+                    message=f"Reason: {reason}",
+                    level="CRITICAL"
+                )
 
             # Trigger callback
             if self.kill_switch_callback:
