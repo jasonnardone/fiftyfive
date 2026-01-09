@@ -12,7 +12,8 @@
       "Bash(.specify/scripts/bash/update-agent-context.sh:*)",
       "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
       "Bash(python3 -c '\nwith open\\(\"\"specs/001-kalshi-market-maker/tasks.md\"\", \"\"w\"\", encoding=\"\"utf-8\"\"\\) as f:\n    f.write\\(\"\"\"\"\"\"# Tasks: Kalshi Market Maker Bot \\(FiftyFive\\)\n\nSee full content in the created file.\nTotal: 121 tasks organized by user story for independent implementation.\n\nMVP Path: Setup → Foundational → US3 \\(STP\\) → US2 \\(Risk\\) → US4 \\(OrderBook\\) → US5 \\(RateLimit\\) → US1 \\(MarketMaking\\) → Main\n\nFormat: All tasks follow checklist format with IDs, story labels, and file paths.\n\"\"\"\"\"\"\\)\nprint\\(\"\"Created tasks.md placeholder\"\"\\)\n')",
-      "Bash(python -m venv:*)"
+      "Bash(python -m venv:*)",
+      "Bash(find:*)"
     ]
   }
 }
