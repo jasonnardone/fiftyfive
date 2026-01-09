@@ -1,0 +1,283 @@
+# FiftyFive Configuration Schema (Pydantic validation)
+
+$schema: http://json-schema.org/draft-07/schema#
+title: FiftyFive Configuration
+type: object
+required: [version, environment, exchange, risk, strategy]
+
+properties:
+  version:
+    type: string
+    pattern: '^\d+\.\d+\.\d+$'
+    
+  environment:
+    type: string
+    enum: [production, demo, staging]
+    
+  exchange:
+    type: object
+    required: [name, api_base_url, ws_url, api_key_id, private_key_path, rate_limits]
+    properties:
+      name:
+        const: kalshi
+      api_base_url:
+        type: string
+        format: uri
+      ws_url:
+        type: string
+        format: uri
+      api_key_id:
+        type: string
+        description: Loaded from $KALSHI_API_KEY_ID
+      private_key_path:
+        type: string
+        description: Loaded from $KALSHI_PRIVATE_KEY_PATH
+      rate_limits:
+        type: object
+        properties:
+          write_rps:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          read_rps:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          burst_size:
+            type: integer
+            minimum: 1
+            default: 5
+            
+  risk:
+    type: object
+    required: [max_exposure_per_market, max_total_exposure, daily_loss_limit]
+    properties:
+      max_exposure_per_market:
+        type: number
+        minimum: 1
+        maximum: 100000
+      max_total_exposure:
+        type: number
+        minimum: 1
+        maximum: 100000
+      max_contracts_per_side:
+        type: integer
+        minimum: 1
+        default: 20
+      daily_loss_limit:
+        type: number
+        minimum: 1
+      error_rate_threshold:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 0.10
+      consecutive_losses:
+        type: integer
+        minimum: 1
+        default: 5
+      inventory_target:
+        type: integer
+        default: 0
+      max_inventory_skew:
+        type: integer
+        minimum: 1
+        default: 10
+      unwind_threshold:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 0.80
+        
+  strategy:
+    type: object
+    required: [name, pricing]
+    properties:
+      name:
+        type: string
+        enum: [pure_market_making, informed_market_making, volatility_harvesting]
+      market_filters:
+        type: object
+        properties:
+          min_daily_volume:
+            type: number
+            minimum: 0
+            default: 10000
+          max_spread:
+            type: number
+            minimum: 0
+            maximum: 1
+            default: 0.10
+          categories:
+            type: array
+            items:
+              type: string
+              enum: [sports, economics, politics, weather, other]
+      pricing:
+        type: object
+        required: [base_spread]
+        properties:
+          model:
+            type: string
+            enum: [mid_price_skew, external_data, ml_model]
+            default: mid_price_skew
+          spread_calculation:
+            type: string
+            enum: [fixed, dynamic, adaptive]
+            default: dynamic
+          base_spread:
+            type: number
+            minimum: 0.01
+            maximum: 0.50
+          min_spread:
+            type: number
+            minimum: 0.01
+          max_spread:
+            type: number
+            minimum: 0.01
+            maximum: 1.00
+          inventory_adjustment:
+            type: boolean
+            default: true
+          inventory_multiplier:
+            type: number
+            minimum: 1.0
+            default: 1.5
+      order_sizing:
+        type: object
+        properties:
+          method:
+            type: string
+            enum: [fixed, kelly_criterion, volatility_scaled]
+            default: fixed
+          base_size:
+            type: integer
+            minimum: 1
+            default: 5
+          max_size:
+            type: integer
+            minimum: 1
+            default: 20
+            
+  execution:
+    type: object
+    properties:
+      default_order_type:
+        type: string
+        enum: [limit, market]
+        default: limit
+      stp_enabled:
+        type: boolean
+        const: true
+        description: Self-trade prevention MUST be enabled
+      stp_cancel_delay:
+        type: number
+        minimum: 0.01
+        maximum: 1.0
+        default: 0.05
+      order_refresh_interval:
+        type: integer
+        minimum: 1
+        default: 10
+      always_quoted:
+        type: boolean
+        default: true
+      quote_both_sides:
+        type: boolean
+        default: true
+        
+  data:
+    type: object
+    properties:
+      websocket:
+        type: object
+        properties:
+          auto_reconnect:
+            type: boolean
+            default: true
+          reconnect_delay:
+            type: integer
+            minimum: 1
+            default: 5
+          max_reconnect_attempts:
+            type: integer
+            minimum: 1
+            default: 10
+          heartbeat_interval:
+            type: integer
+            minimum: 10
+            default: 30
+          snapshot_refresh_interval:
+            type: integer
+            minimum: 10
+            default: 30
+      orderbook:
+        type: object
+        properties:
+          depth_levels:
+            type: integer
+            minimum: 1
+            default: 10
+          staleness_threshold:
+            type: integer
+            minimum: 10
+            default: 60
+            
+  logging:
+    type: object
+    properties:
+      level:
+        type: string
+        enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+        default: INFO
+      log_dir:
+        type: string
+        default: logs/
+      log_rotation:
+        type: string
+        enum: [hourly, daily, weekly]
+        default: daily
+      retention_days:
+        type: integer
+        minimum: 1
+        default: 30
+        
+  monitoring:
+    type: object
+    properties:
+      enabled:
+        type: boolean
+        default: true
+      alerts:
+        type: object
+        properties:
+          slack_enabled:
+            type: boolean
+            default: false
+          email_enabled:
+            type: boolean
+            default: false
+          terminal_enabled:
+            type: boolean
+            default: true
+            
+  advanced:
+    type: object
+    properties:
+      dry_run:
+        type: boolean
+        default: false
+        description: Simulate orders without actual submission
+      use_connection_pooling:
+        type: boolean
+        default: true
+      max_concurrent_requests:
+        type: integer
+        minimum: 1
+        default: 50
+      request_timeout:
+        type: integer
+        minimum: 1
+        default: 10

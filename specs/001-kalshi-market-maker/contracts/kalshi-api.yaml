@@ -1,0 +1,275 @@
+# Kalshi REST API v2 - Key Endpoints for Market Making
+
+openapi: 3.0.0
+info:
+  title: Kalshi Trading API v2
+  description: REST API endpoints used by FiftyFive market maker bot
+  version: 2.0.0
+  
+servers:
+  - url: https://trading-api.kalshi.com/trade-api/v2
+    description: Production API
+  - url: https://demo-api.kalshi.co/trade-api/v2
+    description: Demo API
+
+security:
+  - RSA_PSS_Auth: []
+
+paths:
+  /portfolio/balance:
+    get:
+      summary: Get account balance
+      responses:
+        '200':
+          description: Account balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: integer
+                    description: Available settled balance in cents
+                  balance_total:
+                    type: integer
+                    description: Total equity including unsettled (DO NOT USE for buying power)
+
+  /portfolio/positions:
+    get:
+      summary: Get current positions
+      responses:
+        '200':
+          description: List of positions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  market_positions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Position'
+
+  /portfolio/orders:
+    get:
+      summary: Get open orders
+      responses:
+        '200':
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+    post:
+      summary: Place new order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: '#/components/schemas/Order'
+
+  /portfolio/orders/{order_id}:
+    delete:
+      summary: Cancel order
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order cancelled
+
+  /markets:
+    get:
+      summary: Get markets (paginated)
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            description: Pagination cursor
+        - name: limit:
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+      responses:
+        '200':
+          description: Markets list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  markets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Market'
+                  cursor:
+                    type: string
+                    description: Next page cursor (null if last page)
+
+  /markets/{ticker}/orderbook:
+    get:
+      summary: Get order book snapshot
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order book snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderBook'
+
+components:
+  securitySchemes:
+    RSA_PSS_Auth:
+      type: apiKey
+      in: header
+      name: KALSHI-ACCESS-SIGNATURE
+      description: |
+        RSA-PSS signature authentication
+        Headers required:
+        - KALSHI-ACCESS-KEY: API key ID
+        - KALSHI-ACCESS-TIMESTAMP: Unix timestamp in milliseconds
+        - KALSHI-ACCESS-SIGNATURE: Base64-encoded RSA-PSS signature
+        
+        Message to sign: timestamp + method + path
+        Example: "1704891234567POST/portfolio/orders"
+
+  schemas:
+    Market:
+      type: object
+      properties:
+        ticker:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        status:
+          type: string
+          enum: [open, closed, settled]
+        volume_24h:
+          type: integer
+          description: 24h volume in cents
+        last_price:
+          type: integer
+          description: Last trade price in cents [1-99]
+
+    OrderBook:
+      type: object
+      properties:
+        yes_bids:
+          type: array
+          items:
+            type: array
+            items:
+              - type: integer  # price in cents
+              - type: integer  # quantity
+        yes_asks:
+          type: array
+        no_bids:
+          type: array
+        no_asks:
+          type: array
+        seq:
+          type: integer
+          description: Sequence number for delta validation
+
+    Order:
+      type: object
+      properties:
+        order_id:
+          type: string
+        ticker:
+          type: string
+        side:
+          type: string
+          enum: [yes, no]
+        action:
+          type: string
+          enum: [buy, sell]
+        status:
+          type: string
+          enum: [pending, open, filled, partially_filled, cancelled, rejected]
+        yes_price:
+          type: integer
+          description: Price in cents (for yes orders)
+        no_price:
+          type: integer
+          description: Price in cents (for no orders)
+        count:
+          type: integer
+          description: Quantity of contracts
+
+    OrderRequest:
+      type: object
+      required: [ticker, side, action, type, count]
+      properties:
+        ticker:
+          type: string
+        side:
+          type: string
+          enum: [yes, no]
+        action:
+          type: string
+          enum: [buy, sell]
+        type:
+          type: string
+          enum: [limit, market]
+          description: Use limit for maker rebates
+        yes_price:
+          type: integer
+          description: Required for yes limit orders [1-99]
+        no_price:
+          type: integer
+          description: Required for no limit orders [1-99]
+        count:
+          type: integer
+          minimum: 1
+        client_order_id:
+          type: string
+          description: Optional UUID for tracking
+
+    Position:
+      type: object
+      properties:
+        market_ticker:
+          type: string
+        position:
+          type: integer
+          description: Net position (positive = long)
+        average_price:
+          type: integer
+          description: Average entry price in cents
+        market_value:
+          type: integer
+          description: Current market value in cents
+        realized_pnl:
+          type: integer
+          description: Realized P&L in cents

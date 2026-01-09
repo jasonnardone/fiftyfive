@@ -1,0 +1,86 @@
+version: "1.0.0"
+environment: demo
+
+exchange:
+  name: kalshi
+  api_base_url: https://demo-api.kalshi.co/trade-api/v2
+  ws_url: wss://demo-api.kalshi.co/trade-api/ws/v2
+  api_key_id: ${KALSHI_API_KEY_ID}
+  private_key_path: ${KALSHI_PRIVATE_KEY_PATH}
+  rate_limits:
+    write_rps: 10
+    read_rps: 20
+    burst_size: 5
+
+risk:
+  max_exposure_per_market: 100.00
+  max_total_exposure: 500.00
+  max_contracts_per_side: 10
+  daily_loss_limit: 50.00
+  error_rate_threshold: 0.10
+  consecutive_losses: 5
+  inventory_target: 0
+  max_inventory_skew: 10
+  unwind_threshold: 0.80
+
+strategy:
+  name: pure_market_making
+
+  market_filters:
+    min_daily_volume: 10000
+    max_spread: 0.10
+    categories:
+      - sports
+
+  pricing:
+    model: mid_price_skew
+    spread_calculation: dynamic
+    base_spread: 0.04
+    min_spread: 0.02
+    max_spread: 0.15
+    inventory_adjustment: true
+    inventory_multiplier: 1.5
+
+  order_sizing:
+    method: fixed
+    base_size: 5
+    max_size: 10
+
+execution:
+  default_order_type: limit
+  stp_enabled: true
+  stp_cancel_delay: 0.05
+  order_refresh_interval: 10
+  always_quoted: true
+  quote_both_sides: true
+
+data:
+  websocket:
+    auto_reconnect: true
+    reconnect_delay: 5
+    max_reconnect_attempts: 10
+    heartbeat_interval: 30
+    snapshot_refresh_interval: 30
+
+  orderbook:
+    depth_levels: 10
+    staleness_threshold: 60
+
+logging:
+  level: INFO
+  log_dir: logs/
+  log_rotation: daily
+  retention_days: 30
+
+monitoring:
+  enabled: true
+  alerts:
+    slack_enabled: false
+    email_enabled: false
+    terminal_enabled: true
+
+advanced:
+  dry_run: false
+  use_connection_pooling: true
+  max_concurrent_requests: 50
+  request_timeout: 10
