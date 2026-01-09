@@ -38,6 +38,7 @@ class MarketFilterConfig(BaseModel):
     """Market selection filters"""
     min_daily_volume: float = Field(default=10000, ge=0)
     max_spread: float = Field(default=0.10, ge=0, le=1)
+    max_days_to_expiration: Optional[int] = Field(default=None, ge=1)
     categories: List[str] = Field(default_factory=lambda: ["sports"])
 
 

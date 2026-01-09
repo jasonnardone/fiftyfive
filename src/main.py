@@ -284,22 +284,53 @@ class FiftyFiveBot:
         while self._running:
             try:
                 await self.risk_monitor.periodic_check()
-
-                # Log metrics every minute
-                metrics = await self.risk_monitor.get_metrics()
-                logger.info(
-                    f"Risk metrics: "
-                    f"exposure=${metrics.total_exposure:.2f}, "
-                    f"daily_pnl=${metrics.daily_pnl:.2f}, "
-                    f"total_pnl=${metrics.total_pnl:.2f}"
-                )
-
                 await asyncio.sleep(60)
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Risk monitoring error: {e}")
+                await asyncio.sleep(60)
+
+    async def log_summary_loop(self) -> None:
+        """Background task: log periodic summary of P&L and metrics"""
+        logger.info("Summary logging loop started")
+        
+        while self._running:
+            try:
+                # Wait first
+                await asyncio.sleep(60)
+                
+                # Gather metrics
+                risk_metrics = await self.risk_monitor.get_metrics()
+                order_stats = self.order_manager.get_statistics()
+                
+                # Calculate derived metrics
+                total_fills = order_stats['orders_filled']
+                maker_fills = order_stats['maker_fills']
+                maker_ratio = (maker_fills / total_fills) if total_fills > 0 else 0.0
+                
+                orders_placed = order_stats['orders_placed']
+                fill_rate = (total_fills / orders_placed) if orders_placed > 0 else 0.0
+                
+                # Format summary
+                summary = (
+                    f"\n{'='*20} TRADING SUMMARY {'='*20}\n"
+                    f"P&L (Total): ${risk_metrics.total_pnl:.2f}\n"
+                    f"P&L (Daily): ${risk_metrics.daily_pnl:.2f}\n"
+                    f"Exposure:    ${risk_metrics.total_exposure:.2f}\n"
+                    f"Orders:      {orders_placed} placed, {total_fills} filled\n"
+                    f"Performance: Fill Rate {fill_rate:.1%}, Maker Ratio {maker_ratio:.1%}\n"
+                    f"Active Mkts: {len(self._active_markets)}\n"
+                    f"{'='*57}"
+                )
+                
+                logger.info(summary)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Summary logging error: {e}")
                 await asyncio.sleep(60)
 
     async def quote_refresh_loop(self) -> None:
@@ -343,7 +374,8 @@ class FiftyFiveBot:
             tasks = [
                 asyncio.create_task(self.quote_refresh_loop()),
                 asyncio.create_task(self.process_fills_loop()),
-                asyncio.create_task(self.risk_monitoring_loop())
+                asyncio.create_task(self.risk_monitoring_loop()),
+                asyncio.create_task(self.log_summary_loop())
             ]
 
             # Wait for shutdown signal

@@ -2,6 +2,7 @@
 
 import asyncio
 from typing import List, Dict, Optional
+from datetime import datetime, timedelta
 from loguru import logger
 
 from src.api.client import KalshiClient
@@ -73,10 +74,12 @@ class MarketDiscovery:
             
             markets = response.get('markets', [])
             all_markets.extend(markets)
-            logger.debug(f"Fetched page: {len(markets)} markets (Total: {len(all_markets)})")
+            logger.info(f"Fetched page: {len(markets)} markets (Total: {len(all_markets)})")
             
             cursor = response.get('cursor')
-            if not cursor:
+            if not cursor or len(all_markets) > 10000:  # Safety limit
+                if len(all_markets) > 10000:
+                    logger.warning("Market limit (10000) reached, stopping discovery")
                 break
                 
             # Rate limit protection
@@ -96,6 +99,24 @@ class MarketDiscovery:
         if self.config.categories:
             if category not in self.config.categories:
                 return False
+
+        # Expiration filter
+        if self.config.max_days_to_expiration:
+            expiration = market.get('close_time') or market.get('expiration_time')
+            if expiration:
+                # Handle ISO format '2023-12-31T23:59:59Z'
+                if isinstance(expiration, str):
+                    try:
+                        exp_time = datetime.fromisoformat(expiration.replace('Z', '+00:00'))
+                        # Use timezone-aware current time (UTC)
+                        now = datetime.now(exp_time.tzinfo) if exp_time.tzinfo else datetime.utcnow()
+                        
+                        days_to_exp = (exp_time - now).days
+                        
+                        if days_to_exp > self.config.max_days_to_expiration:
+                            return False
+                    except ValueError:
+                        pass # Ignore parsing errors, assume valid
 
         # Note: Spread filtering typically requires order book snapshot.
         # We skip it here to avoid N+1 API calls.

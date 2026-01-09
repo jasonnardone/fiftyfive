@@ -191,16 +191,16 @@
 
 **Goal**: Visibility via logging and alerts
 
-- [ ] T088 [P] [US8] Implement AlertDispatcher in src/utils/alerts.py
+- [x] T088 [P] [US8] Implement AlertDispatcher in src/utils/alerts.py
 - [ ] T089 [P] [US8] Add Slack integration
 - [ ] T090 [P] [US8] Add email integration
-- [ ] T091 [P] [US8] Add terminal alerts
-- [ ] T092 [US8] Integrate alerts into RiskMonitor
-- [ ] T093 [US8] Add alert triggers
-- [ ] T094 [US8] Implement P&L summary logging
-- [ ] T095 [US8] Add fill rate tracking
-- [ ] T096 [US8] Add maker ratio tracking
-- [ ] T097 [US8] Add exposure tracking
+- [x] T091 [P] [US8] Add terminal alerts
+- [x] T092 [US8] Integrate alerts into RiskMonitor
+- [x] T093 [US8] Add alert triggers
+- [x] T094 [US8] Implement P&L summary logging
+- [x] T095 [US8] Add fill rate tracking
+- [x] T096 [US8] Add maker ratio tracking
+- [x] T097 [US8] Add exposure tracking
 - [ ] T098 [US8] Implement log rotation (30 days)
 - [ ] T099 [US8] Add structured logging
 

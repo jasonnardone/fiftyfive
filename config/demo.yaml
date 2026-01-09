@@ -29,6 +29,7 @@ strategy:
   market_filters:
     min_daily_volume: 0
     max_spread: 0.10
+    max_days_to_expiration: 7
     categories: []
 
   pricing:

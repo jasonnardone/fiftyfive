@@ -52,6 +52,7 @@ class OrderManager:
         self._orders_placed = 0
         self._orders_rejected = 0
         self._orders_filled = 0
+        self._maker_fills = 0
 
         logger.info("Order manager initialized")
 
@@ -294,6 +295,9 @@ class OrderManager:
                             await self.stp_engine.remove_order(fill.order_id, fill.market_ticker)
 
                     self._orders_filled += 1
+                    if fill.is_maker:
+                        self._maker_fills += 1
+                        
                     fills.append(fill)
 
                     logger.info(
@@ -431,5 +435,6 @@ class OrderManager:
             'orders_placed': self._orders_placed,
             'orders_rejected': self._orders_rejected,
             'orders_filled': self._orders_filled,
+            'maker_fills': self._maker_fills,
             'active_orders': len(self._active_orders)
         }
