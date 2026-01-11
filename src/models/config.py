@@ -40,6 +40,13 @@ class MarketFilterConfig(BaseModel):
     max_spread: float = Field(default=0.10, ge=0, le=1)
     max_days_to_expiration: Optional[int] = Field(default=None, ge=1)
     categories: List[str] = Field(default_factory=lambda: ["sports"])
+    sort_by: str = Field(default="expiration")  # 'expiration' or 'volume'
+
+    @field_validator('sort_by')
+    def validate_sort_by(cls, v):
+        if v not in ('expiration', 'volume'):
+            raise ValueError("sort_by must be 'expiration' or 'volume'")
+        return v
 
 
 class PricingConfig(BaseModel):

@@ -207,12 +207,12 @@ A trader wants visibility into bot performance through real-time metrics (P&L, f
 
 ### Key Entities
 
-- **Market**: A Kalshi prediction market with ticker symbol, category, current status (open/closed), volume, and order book
-- **Order**: A limit order with market ticker, side (yes/no), action (buy/sell), price (0.01-0.99), quantity, and client ID for tracking
-- **Position**: Holdings in a specific market including contracts held, side, average entry price, market value, and realized/unrealized P&L
-- **OrderBook**: Real-time order book for a market with yes/no bids/asks at multiple price levels, sequence number, and last update timestamp
-- **Fill**: Executed trade with market ticker, side, price, quantity, timestamp, maker/taker flag, and fee amount
-- **RiskLimits**: Configured thresholds including max exposure per market, total exposure, daily loss limit, inventory limits, and error rate threshold
+- **Market**: A Kalshi prediction market with ticker symbol, category, status, volume, and order book
+- **Order**: A limit order with market ticker, side, action, price (0.01-0.99), quantity, and client ID
+- **Position**: Holdings in a market including quantity (net position), side, total cost, and P&L (realized/unrealized)
+- **OrderBook**: Real-time order book with bids/asks at multiple price levels, sequence ID, and last updated timestamp
+- **Fill**: Executed trade with market ticker, side, price, quantity, timestamp, maker/taker fees, and net proceeds
+- **RiskLimits**: Configured thresholds including max exposure, daily loss limit, inventory target/skew, and error rate
 - **Strategy**: Pricing configuration with strategy type, spread settings, inventory adjustment factors, and order sizing parameters
 - **RateLimit**: Token bucket with rate (requests/second), capacity (burst size), current token count, and last refill timestamp
 

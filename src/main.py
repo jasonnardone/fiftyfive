@@ -7,10 +7,12 @@ import asyncio
 import argparse
 import signal
 import sys
+import os
 from typing import Optional, List
 from datetime import datetime
 from loguru import logger
 import aiohttp
+from dotenv import load_dotenv
 
 from src.config.loader import load_config
 from src.models.config import Config
@@ -451,8 +453,8 @@ async def main():
     parser.add_argument(
         '--config',
         type=str,
-        required=True,
-        help='Path to configuration file'
+        required=False,
+        help='Path to configuration file. If not provided, uses ENVIRONMENT var (default: demo)'
     )
     parser.add_argument(
         '--dry-run',
@@ -462,9 +464,19 @@ async def main():
 
     args = parser.parse_args()
 
+    # Determine config path
+    if args.config:
+        config_path = args.config
+    else:
+        # Load env vars to get ENVIRONMENT
+        load_dotenv(override=True)
+        env = os.getenv("ENVIRONMENT", "demo")
+        config_path = f"config/{env}.yaml"
+        print(f"No config provided. Using {env} environment -> {config_path}")
+
     # Load configuration
     try:
-        config = load_config(args.config)
+        config = load_config(config_path)
     except Exception as e:
         print(f"Failed to load configuration: {e}")
         sys.exit(1)
@@ -483,7 +495,7 @@ async def main():
     logger.info("=" * 60)
     logger.info(f"Environment: {config.environment}")
     logger.info(f"Dry-run: {args.dry_run}")
-    logger.info(f"Config: {args.config}")
+    logger.info(f"Config: {config_path}")
     logger.info("=" * 60)
 
     # Create and run bot

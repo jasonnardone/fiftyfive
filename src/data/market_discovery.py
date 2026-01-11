@@ -47,12 +47,23 @@ class MarketDiscovery:
             filtered_markets = []
             for market_data in all_markets:
                 if self._matches_filters(market_data):
-                    filtered_markets.append(market_data['ticker'])
+                    filtered_markets.append(market_data)
 
             logger.info(f"Found {len(filtered_markets)} markets matching filters")
             
+            # Sort markets
+            if self.config.sort_by == 'expiration':
+                # Sort by close_time/expiration_time (soonest first)
+                filtered_markets.sort(key=lambda m: m.get('close_time') or m.get('expiration_time') or '9999-12-31')
+            elif self.config.sort_by == 'volume':
+                # Sort by volume (highest first)
+                filtered_markets.sort(key=lambda m: m.get('volume', 0), reverse=True)
+            
+            # Extract tickers
+            tickers = [m['ticker'] for m in filtered_markets]
+            
             # Cache result
-            self._cached_markets = filtered_markets[:limit]
+            self._cached_markets = tickers[:limit]
             
             return self._cached_markets
 
@@ -89,15 +100,19 @@ class MarketDiscovery:
 
     def _matches_filters(self, market: Dict) -> bool:
         """Check if market matches configured filters"""
+        ticker = market.get('ticker')
+        
         # Volume filter
         volume = market.get('volume', 0)
         if volume < self.config.min_daily_volume:
+            # logger.debug(f"Rejected {ticker}: Volume {volume} < {self.config.min_daily_volume}")
             return False
 
         # Category filter
         category = market.get('category')
         if self.config.categories:
             if category not in self.config.categories:
+                # logger.debug(f"Rejected {ticker}: Category {category} not in {self.config.categories}")
                 return False
 
         # Expiration filter
@@ -114,12 +129,14 @@ class MarketDiscovery:
                         days_to_exp = (exp_time - now).days
                         
                         if days_to_exp > self.config.max_days_to_expiration:
+                            # logger.debug(f"Rejected {ticker}: Expires in {days_to_exp} days > {self.config.max_days_to_expiration}")
                             return False
+                        
+                        # Also filter out expired markets (negative days)
+                        if days_to_exp < -1:
+                            return False
+                            
                     except ValueError:
                         pass # Ignore parsing errors, assume valid
 
-        # Note: Spread filtering typically requires order book snapshot.
-        # We skip it here to avoid N+1 API calls.
-        # Spread checks should happen during trading/quoting loop.
-        
         return True

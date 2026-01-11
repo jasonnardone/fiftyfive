@@ -29,8 +29,9 @@ strategy:
   market_filters:
     min_daily_volume: 0
     max_spread: 0.10
-    max_days_to_expiration: 7
+    max_days_to_expiration: 30
     categories: []
+    sort_by: expiration # 'expiration' or 'volume'
 
   pricing:
     model: mid_price_skew

@@ -226,10 +226,10 @@
 ## Phase 12: Polish
 
 - [ ] T110 [P] Create tests/conftest.py
-- [ ] T111 [P] Unit tests for PriceAdapter
-- [ ] T112 [P] Unit tests for TokenBucket
-- [ ] T113 [P] Unit tests for STP
-- [ ] T114 [P] Integration test for orderbook
+- [x] T111 [P] Unit tests for PriceAdapter
+- [x] T112 [P] Unit tests for TokenBucket
+- [x] T113 [P] Unit tests for STP
+- [x] T114 [P] Integration test for orderbook
 - [ ] T115 [P] End-to-end test
 - [ ] T116 [P] Update README.md
 - [ ] T117 [P] Create systemd service template

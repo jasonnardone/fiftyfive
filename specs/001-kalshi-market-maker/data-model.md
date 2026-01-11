@@ -1,9 +1,10 @@
 # Data Model: FiftyFive Entities
 
 **Feature**: Kalshi Market Maker Bot  
-**Date**: 2026-01-08
+**Date**: 2026-01-11
+**Status**: Updated to match implementation
 
-This document defines all core entities, their schemas, relationships, and state transitions.
+This document defines all core entities, their schemas, relationships, and state transitions based on the current implementation in `src/models/`.
 
 ---
 
@@ -20,178 +21,185 @@ This document defines all core entities, their schemas, relationships, and state
 
 ## 1. Market Entity
 
-Represents a Kalshi prediction market.
+Represents a Kalshi prediction market. Defined in `src/models/market.py`.
 
 **Fields:**
 - ticker: str (unique ID)
 - title: str
-- category: str (sports, economics, politics)
-- status: OPEN | CLOSED | SETTLED
-- close_time: datetime
-- volume_24h: float (USD)
-- last_price: float [0.01-0.99]
+- category: str
+- status: MarketStatus (OPEN | CLOSED | SETTLED)
 
-**Validation:**
-- status transitions: OPEN -> CLOSED -> SETTLED (irreversible)
-- last_price must be [0.01, 0.99]
+**Contract Details:**
+- yes_sub_title: Optional[str]
+- no_sub_title: Optional[str]
+
+**Market Data:**
+- volume: int (24h volume)
+- open_interest: int
+- liquidity: int
+
+**Price Data:**
+- yes_bid: Optional[float]
+- yes_ask: Optional[float]
+- no_bid: Optional[float]
+- no_ask: Optional[float]
+- last_price: Optional[float]
+
+**Timing & Settlement:**
+- close_time: Optional[datetime]
+- expiration_time: Optional[datetime]
+- created_at: Optional[datetime]
+- result: Optional[str] ('yes' or 'no')
+- settled_at: Optional[datetime]
 
 ---
 
 ## 2. OrderBook Entity
 
-Real-time order book state.
+Real-time order book state. Defined in `src/models/order.py`.
 
 **Fields:**
 - market_ticker: str
-- yes_bids: List[PriceLevel] (sorted desc)
-- yes_asks: List[PriceLevel] (sorted asc)
-- no_bids: List[PriceLevel]
-- no_asks: List[PriceLevel]
-- sequence_number: int
-- timestamp: datetime
+- yes_bids: List[PriceLevel] (descending)
+- yes_asks: List[PriceLevel] (ascending)
+- no_bids: List[PriceLevel] (descending)
+- no_asks: List[PriceLevel] (ascending)
+- sequence: int (Sequence number for delta validation)
+- last_updated: Optional[datetime]
 
 **PriceLevel:**
-- price: float [0.01-0.99]
-- quantity: int
-
-**Invariants:**
-- sequence_number must increment by 1 (gaps trigger resync)
-- staleness < 60 seconds (force resync if exceeded)
+- price: int (Price in cents 1-99)
+- quantity: int (Number of contracts)
 
 ---
 
 ## 3. Order Entity
 
-Limit order placed on exchange.
+Limit order placed on exchange. Defined in `src/models/order.py`.
 
 **Fields:**
-- order_id: str (exchange ID)
+- order_id: Optional[str] (Exchange ID)
 - client_order_id: str (UUID)
 - market_ticker: str
-- side: YES | NO
-- action: BUY | SELL  
+- side: OrderSide (YES | NO)
+- action: OrderAction (BUY | SELL)
 - price: float [0.01-0.99]
 - quantity: int
-- status: PENDING | OPEN | FILLED | PARTIALLY_FILLED | CANCELLED | REJECTED
+- filled_quantity: int
+- remaining_quantity: int
+- status: OrderStatus
+- created_at: Optional[datetime]
+- updated_at: Optional[datetime]
+- error_message: Optional[str]
 
-**State Transitions:**
-PENDING -> OPEN -> PARTIALLY_FILLED -> FILLED
-  |        |            |
-  v        v            v
-REJECTED CANCELLED CANCELLED
+**OrderStatus Enum:**
+- PENDING
+- OPEN ("resting")
+- PARTIALLY_FILLED
+- FILLED
+- CANCELLED
+- REJECTED
 
 ---
 
 ## 4. Fill Entity
 
-Executed trade.
+Executed trade. Defined in `src/models/order.py`.
 
 **Fields:**
 - fill_id: str
 - order_id: str
 - market_ticker: str
-- side: YES | NO
-- price: float
+- side: OrderSide
+- action: OrderAction
+- price: float (Execution price)
 - quantity: int
-- is_maker: bool (true = provided liquidity)
-- fee_rate: float (-0.005 maker, +0.007 taker)
-- gross_value: float (price * quantity)
-- net_value: float (gross_value + fee_amount)
+- maker_fee: float (Negative = rebate)
+- taker_fee: float (Positive = cost)
+- filled_at: Optional[datetime]
 
-**Calculations:**
-fee_amount = gross_value * fee_rate
-net_value = gross_value + fee_amount
+**Calculated Properties:**
+- net_proceeds: float (gross_value - fees)
+- is_maker: bool (maker_fee < 0)
 
 ---
 
 ## 5. Position Entity
 
-Holdings in a market with P&L tracking.
+Holdings in a market with P&L tracking. Defined in `src/models/position.py`.
 
 **Fields:**
 - market_ticker: str
-- contracts_long: int (positive = long, negative = short)
-- average_entry_price: float
-- cost_basis: float
-- market_value: float  
-- unrealized_pnl: float (market_value - cost_basis)
-- realized_pnl: float (locked-in P&L)
-- fees_paid: float
+- side: OrderSide
+- quantity: int (Net position: positive=long, negative=short)
+- total_cost: float (Total cost basis)
+- realized_pnl: float
+- unrealized_pnl: float
+- total_fees: float
+- opened_at: Optional[datetime]
+- updated_at: Optional[datetime]
 
-**Validation:**
-- contracts_long within risk limits (default ±20)
-- position value <= max_exposure_per_market
+**Calculated Properties:**
+- average_price: float
+- market_value: float
+- is_flat: bool
+- total_pnl: float (realized + unrealized)
+- net_pnl: float (total_pnl - total_fees)
 
 ---
 
 ## 6. Config Entity
 
-System configuration from YAML.
+System configuration from YAML. Defined in `src/models/config.py`.
 
 **Top-level sections:**
-- environment: production | demo | staging
-- exchange: API URLs, rate limits
-- risk: RiskConfig (limits, kill switch thresholds)
-- strategy: StrategyConfig (pricing, spreads)
-- execution: order refresh interval, STP settings
-- data: WebSocket config, order book settings
-- logging: log levels, rotation
-- monitoring: alerts config
+- environment: str
+- exchange: ExchangeConfig
+- risk: RiskConfig
+- strategy: StrategyConfig
+- execution: ExecutionConfig
+- data: DataConfig
+- logging: LoggingConfig
+- monitoring: MonitoringConfig
 
 ---
 
 ## 7. RiskConfig
 
 **Fields:**
-- max_exposure_per_market: float (default: 500 USD)
-- max_total_exposure: float (default: 2000 USD)
-- max_contracts_per_side: int (default: 20)
-- daily_loss_limit: float (default: 100 USD)
-- error_rate_threshold: float (default: 0.10)
-- consecutive_losses: int (default: 5)
-- inventory_target: int (default: 0)
-- max_inventory_skew: int (default: 10)
+- max_exposure_per_market: float
+- max_total_exposure: float
+- max_contracts_per_side: int
+- daily_loss_limit: float
+- error_rate_threshold: float
+- consecutive_losses: int
+- inventory_target: int
+- max_inventory_skew: int
 
 ---
 
 ## 8. StrategyConfig
 
 **Fields:**
-- name: pure_market_making | informed_market_making | volatility_harvesting
-- market_filters: min_daily_volume, categories, max_spread
-- pricing: base_spread, min_spread, max_spread, inventory_adjustment
-- order_sizing: base_size, max_size
-- rebalancing: enabled, interval
-
----
-
-## 9. RateLimit (Runtime State)
-
-**Fields:**
-- rate: float (tokens per second)
-- capacity: int (max burst)
-- tokens: float (current available)
-- last_update: float (monotonic time)
-
-**Behavior:**
-- Tokens replenish at `rate` per second
-- Capped at `capacity`
-- Each API call consumes 1 token
-- Blocks if tokens < 1
+- name: str
+- market_filters: dict
+- pricing: dict
+- order_sizing: dict
+- rebalancing: dict
 
 ---
 
 ## Key Relationships
 
-- Market 1--1 OrderBook (each market has one current orderbook)
-- Market 1--0..1 Position (only if we hold contracts)
-- Market 1--* Order (multiple open orders per market)
-- Order 1--* Fill (partial fills)
-- Position aggregates all Fills for that market
-- Config 1--1 all components (single source of truth)
+- Market 1--1 OrderBook
+- Market 1--0..1 Position
+- Market 1--* Order
+- Order 1--* Fill
+- Position aggregates Fills
+- Config defines system behavior
 
 ---
 
 ## Summary
 
-This data model provides type safety, clear state transitions, P&L accuracy, compliance validation, and full auditability. Ready for Phase 1 implementation.
+This data model reflects the Python dataclasses implemented in the `src/models` package. It serves as the authoritative reference for the application's state.

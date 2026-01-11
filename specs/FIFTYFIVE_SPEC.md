@@ -1003,16 +1003,30 @@ class OrderBook:
         
         self._initialize_from_snapshot(snapshot)
         
-    def apply_delta(self, delta: dict):
-        """Apply incremental update"""
-        for update in delta['yes']:
-            if update[1] == 0:  # quantity = 0 means remove
-                self._remove_level(self.yes_bids, update[0])
-            else:
-                self._upsert_level(self.yes_bids, update)
-                
-        # Repeat for yes_asks, no_bids, no_asks
-        self.last_update = time.time()
+    def apply_delta(self, side: str, action: str, deltas: list[list[int]]) -> None:
+        """Apply order book delta update"""
+        # Select the correct book side
+        if side == "yes":
+            book = self.yes_bids if action == 'bid' else self.yes_asks
+        else:
+            book = self.no_bids if action == 'bid' else self.no_asks
+
+        # Apply each delta
+        for price_cents, quantity in deltas:
+            # Remove existing level
+            book[:] = [level for level in book if level.price != price_cents]
+
+            # Add new level if quantity > 0
+            if quantity > 0:
+                book.append(PriceLevel(price=price_cents, quantity=quantity))
+
+        # Re-sort
+        if action == 'bid':
+            book.sort(key=lambda x: x.price, reverse=True)  # Descending for bids
+        else:
+            book.sort(key=lambda x: x.price)  # Ascending for asks
+
+        self.last_updated = datetime.utcnow()
         
     def get_best_bid(self, side: str) -> Optional[float]:
         """Get best available bid price"""
@@ -1214,12 +1228,19 @@ class PositionTracker:
         
         for pos in response['market_positions']:
             market = pos['market_ticker']
+            # API returns net position, need to determine side
+            raw_position = pos.get('position', 0)
+            side = "yes"  # Default assumption or logic to determine side
             
-            self.positions[market] = Position(
+            # Create or update position
+            if market not in self.positions:
+                 self.positions[market] = {}
+                 
+            self.positions[market][side] = Position(
                 market_ticker=market,
-                contracts_long=pos.get('position', 0),
-                avg_entry_price=pos.get('average_price', 0) / 100.0,
-                market_value=pos.get('market_value', 0) / 100.0,
+                side=side,
+                quantity=raw_position,
+                total_cost=pos.get('market_value', 0) / 100.0, # Approximate from market value
                 realized_pnl=pos.get('realized_pnl', 0) / 100.0
             )
             
