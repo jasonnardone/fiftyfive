@@ -13,32 +13,34 @@ exchange:
     burst_size: 5
 
 risk:
-  max_exposure_per_market: 100.00
-  max_total_exposure: 500.00
-  max_contracts_per_side: 10
-  daily_loss_limit: 50.00
+  max_exposure_per_market: 10.00
+  max_total_exposure: 75.00
+  max_contracts_per_side: 2
+  daily_loss_limit: 15.00
   error_rate_threshold: 0.10
-  consecutive_losses: 5
+  consecutive_losses: 3
   inventory_target: 0
-  max_inventory_skew: 10
+  max_inventory_skew: 5
   unwind_threshold: 0.80
 
 strategy:
   name: pure_market_making
+  target_market_count: 5
 
   market_filters:
     min_daily_volume: 0
     max_spread: 0.10
-    max_days_to_expiration: 30
-    categories: []
-    sort_by: expiration # 'expiration' or 'volume'
+    max_days_to_expiration: null
+    categories: ["economics", "politics"]
+    sort_by: volume # 'expiration' or 'volume'
+    max_market_discovery_limit: 20000 # 0 or None for no limit
 
   pricing:
     model: mid_price_skew
     spread_calculation: dynamic
-    base_spread: 0.04
-    min_spread: 0.02
-    max_spread: 0.15
+    base_spread: 0.08
+    min_spread: 0.04
+    max_spread: 0.12
     inventory_adjustment: true
     inventory_multiplier: 1.5
     volatility_adjustment: true
@@ -55,7 +57,6 @@ execution:
   stp_cancel_delay: 0.05
   order_refresh_interval: 10
   always_quoted: true
-  quote_both_sides: true
 
 data:
   websocket:
@@ -70,7 +71,7 @@ data:
     staleness_threshold: 60
 
 logging:
-  level: INFO
+  level: DEBUG
   log_dir: logs/
   log_rotation: daily
   retention_days: 30

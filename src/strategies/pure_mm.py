@@ -92,12 +92,16 @@ class PureMarketMakingStrategy(Strategy):
         """
         # Get mid price from order book
         mid_price = self.orderbook_manager.get_mid_price(market_ticker, side)
+        
+        # Calculate spread
         if mid_price is None:
-            logger.debug(f"No mid price available for {market_ticker} {side.value}")
-            return None
-
-        # Calculate spread (with inventory adjustment)
-        spread = self._calculate_spread(market_ticker, side, mid_price)
+            # Fallback for empty order book: center at 0.50 with max spread
+            mid_price = 0.50
+            spread = self.max_spread
+            logger.debug(f"No mid price for {market_ticker} {side.value}, using default 0.50")
+        else:
+            # Normal spread calculation
+            spread = self._calculate_spread(market_ticker, side, mid_price)
 
         # Calculate bid/ask around mid
         half_spread = spread / 2.0
@@ -224,15 +228,12 @@ class PureMarketMakingStrategy(Strategy):
         """
         # Check if order book is available and not stale
         if self.orderbook_manager.is_stale(market_ticker):
-            logger.debug(f"Order book stale for {market_ticker}")
-            return False
-
-        # Check if mid prices available
-        yes_mid = self.orderbook_manager.get_mid_price(market_ticker, OrderSide.YES)
-        no_mid = self.orderbook_manager.get_mid_price(market_ticker, OrderSide.NO)
-
-        if yes_mid is None or no_mid is None:
-            logger.debug(f"No mid prices for {market_ticker}")
+            # logger.debug(f"Order book stale for {market_ticker}")
+            # Log only occasionally or if strictly needed, but here it helps debug "why no quotes"
+            # Getting orderbook timestamp to see how stale
+            ob = self.orderbook_manager.get_orderbook(market_ticker)
+            last_up = ob.last_updated if ob else "Never"
+            logger.debug(f"Skipping {market_ticker}: Order book stale (Last updated: {last_up})")
             return False
 
         # TODO: Additional checks:

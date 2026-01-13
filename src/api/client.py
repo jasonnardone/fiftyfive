@@ -222,7 +222,7 @@ class KalshiClient:
             body['client_order_id'] = client_order_id
 
         response = await self._request('POST', '/portfolio/orders', body=body, is_write=True)
-        return response.get('order', {})
+        return response
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """Cancel order
@@ -234,7 +234,7 @@ class KalshiClient:
             Cancelled order object
         """
         response = await self._request('DELETE', f'/portfolio/orders/{order_id}', is_write=True)
-        return response.get('order', {})
+        return response
 
     # ============================================================================
     # Market Data Endpoints

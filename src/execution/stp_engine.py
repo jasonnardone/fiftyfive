@@ -198,14 +198,19 @@ class STPEngine:
                 return True
 
         # Also check complementarity constraint: yes_price + no_price >= 1.00
-        if new_order.side != existing_order.side:
+        # This ONLY applies if both orders are BUY orders (trying to buy the full bundle)
+        if (new_order.side != existing_order.side and 
+            new_order.action == OrderAction.BUY and 
+            existing_order.action == OrderAction.BUY):
+            
             yes_price = new_order.price if new_order.side == OrderSide.YES else existing_order.price
             no_price = new_order.price if new_order.side == OrderSide.NO else existing_order.price
 
-            if not PriceAdapter.validate_complementarity(yes_price, no_price):
+            # If prices sum to >= 1.00, they match against the bundle -> Self Trade
+            if PriceAdapter.validate_complementarity(yes_price, no_price):
                 logger.warning(
-                    f"STP: Complementarity violation detected: "
-                    f"YES={yes_price:.2f} + NO={no_price:.2f} < 1.00"
+                    f"STP: Complementarity violation detected (BUY+BUY): "
+                    f"YES={yes_price:.2f} + NO={no_price:.2f} >= 1.00"
                 )
                 return True
 

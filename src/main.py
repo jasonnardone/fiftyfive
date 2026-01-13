@@ -8,6 +8,9 @@ import argparse
 import signal
 import sys
 import os
+
+# Add project root to path so 'src' module can be found
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from typing import Optional, List
 from datetime import datetime
 from loguru import logger
@@ -16,7 +19,7 @@ from dotenv import load_dotenv
 
 from src.config.loader import load_config
 from src.models.config import Config
-from src.models.order import OrderSide
+from src.models.order import OrderSide, OrderAction
 from src.utils.logger import setup_logger
 from src.utils.rate_limiter import RateLimiter
 from src.utils.alerts import AlertDispatcher
@@ -159,7 +162,9 @@ class FiftyFiveBot:
             api_client=self.api_client,
             stp_engine=self.stp_engine,
             risk_monitor=self.risk_monitor,
-            position_tracker=self.position_tracker
+            position_tracker=self.position_tracker,
+            orderbook_manager=self.orderbook_manager,
+            dry_run=self.dry_run
         )
 
         # Sync existing orders (populate STP cache)
@@ -184,7 +189,9 @@ class FiftyFiveBot:
             logger.error("Market discovery not initialized")
             return []
 
-        return await self.market_discovery.get_target_markets(limit=10)
+        return await self.market_discovery.get_target_markets(
+            limit=self.config.strategy.target_market_count
+        )
 
     async def subscribe_markets(self, tickers: List[str]) -> None:
         """Subscribe to market order books
@@ -194,11 +201,17 @@ class FiftyFiveBot:
         """
         logger.info(f"Subscribing to {len(tickers)} market(s)...")
 
+        titles = self.market_discovery.get_market_titles() if self.market_discovery else {}
+
         for ticker in tickers:
             success = await self.orderbook_manager.subscribe_market(ticker)
             if success:
                 self._active_markets.append(ticker)
-                logger.info(f"✓ Subscribed: {ticker}")
+                
+                # Use title in log if available
+                title = titles.get(ticker)
+                log_msg = f"✓ Subscribed: {ticker} ({title})" if title else f"✓ Subscribed: {ticker}"
+                logger.info(log_msg)
             else:
                 logger.error(f"✗ Failed to subscribe: {ticker}")
 
@@ -221,33 +234,25 @@ class FiftyFiveBot:
                 quotes = await self.strategy.calculate_quotes(ticker)
 
                 for quote in quotes:
-                    if self.dry_run:
-                        # Dry-run mode: log only
-                        logger.info(
-                            f"[DRY-RUN] Would place: {quote.market_ticker} {quote.side.value} "
-                            f"bid {quote.bid_size}@{quote.bid_price:.2f} "
-                            f"ask {quote.ask_size}@{quote.ask_price:.2f}"
+                    # Place bid
+                    if quote.bid_price and quote.bid_size > 0:
+                        await self.order_manager.place_order(
+                            market_ticker=quote.market_ticker,
+                            side=quote.side,
+                            action=OrderAction.BUY,
+                            price=quote.bid_price,
+                            quantity=quote.bid_size
                         )
-                    else:
-                        # Place bid
-                        if quote.bid_price and quote.bid_size > 0:
-                            await self.order_manager.place_order(
-                                market_ticker=quote.market_ticker,
-                                side=quote.side,
-                                action="buy",
-                                price=quote.bid_price,
-                                quantity=quote.bid_size
-                            )
 
-                        # Place ask
-                        if quote.ask_price and quote.ask_size > 0:
-                            await self.order_manager.place_order(
-                                market_ticker=quote.market_ticker,
-                                side=quote.side,
-                                action="sell",
-                                price=quote.ask_price,
-                                quantity=quote.ask_size
-                            )
+                    # Place ask
+                    if quote.ask_price and quote.ask_size > 0:
+                        await self.order_manager.place_order(
+                            market_ticker=quote.market_ticker,
+                            side=quote.side,
+                            action=OrderAction.SELL,
+                            price=quote.ask_price,
+                            quantity=quote.ask_size
+                        )
 
             except Exception as e:
                 logger.error(f"Quote refresh error for {ticker}: {e}")
@@ -316,8 +321,9 @@ class FiftyFiveBot:
                 fill_rate = (total_fills / orders_placed) if orders_placed > 0 else 0.0
                 
                 # Format summary
+                title = "TRADING SUMMARY [SIMULATED]" if self.dry_run else "TRADING SUMMARY"
                 summary = (
-                    f"\n{'='*20} TRADING SUMMARY {'='*20}\n"
+                    f"\n{'='*20} {title} {'='*20}\n"
                     f"P&L (Total): ${risk_metrics.total_pnl:.2f}\n"
                     f"P&L (Daily): ${risk_metrics.daily_pnl:.2f}\n"
                     f"Exposure:    ${risk_metrics.total_exposure:.2f}\n"
@@ -364,6 +370,11 @@ class FiftyFiveBot:
             if not markets:
                 logger.error("No markets found")
                 return
+
+            # Pass market titles to order manager
+            if self.market_discovery and self.order_manager:
+                titles = self.market_discovery.get_market_titles()
+                self.order_manager.update_market_titles(titles)
 
             await self.subscribe_markets(markets)
 

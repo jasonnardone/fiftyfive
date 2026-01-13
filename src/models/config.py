@@ -41,6 +41,7 @@ class MarketFilterConfig(BaseModel):
     max_days_to_expiration: Optional[int] = Field(default=None, ge=1)
     categories: List[str] = Field(default_factory=lambda: ["sports"])
     sort_by: str = Field(default="expiration")  # 'expiration' or 'volume'
+    max_market_discovery_limit: Optional[int] = Field(default=10000)  # 0 or None = no limit
 
     @field_validator('sort_by')
     def validate_sort_by(cls, v):
@@ -88,6 +89,7 @@ class OrderSizingConfig(BaseModel):
 class StrategyConfig(BaseModel):
     """Trading strategy configuration"""
     name: str
+    target_market_count: int = Field(default=20, ge=1)
     market_filters: MarketFilterConfig = Field(default_factory=MarketFilterConfig)
     pricing: PricingConfig
     order_sizing: OrderSizingConfig
